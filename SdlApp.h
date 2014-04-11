@@ -32,12 +32,12 @@ private:
    bool running;
    SDL_Window* display;
    void keydown(const char * key);
-   void clearCanvas(void);
 
 public:
    SdlApp();
    int run();
    void handleEvent(SDL_Event* e);
+   void clearCanvas();
    void draw();
 };
 
