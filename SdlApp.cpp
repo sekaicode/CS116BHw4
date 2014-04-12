@@ -45,7 +45,7 @@ Point operator*(const Point& p, GLdouble scalar)
  RETURNS: Nothing
  REMARKS:
  */
-Point randomUnit()
+Point randomlyPoint()
 {
    //generate random point within unit sphere
    Point vec(0.0, 0.0, 0.0);
@@ -68,7 +68,7 @@ Point randomUnit()
  would be reduced
  REMARKS:
  */
-inline GLdouble attenuation(GLdouble distance)
+inline GLdouble attenuate(GLdouble distance)
 {
    return ATTENUATION_FACTOR / (ATTENUATION_FACTOR + distance * distance);
 }
@@ -86,11 +86,11 @@ inline GLdouble attenuation(GLdouble distance)
  RETURNS:  Nothing
  REMARKS:
  */
-void rayTraceRay(Shape& scene, vector<Light> lights, const Line& ray,
-      Point& color, unsigned int depth)
+void traceRay(Shape& scene, vector<Light> lights, const Line& ray, Point& color,
+      unsigned int depth)
 {
    Intersection intersection;
-   scene.intersection(ray, Point(0.0, 0.0, 0.0), intersection);
+   scene.doIIntersectWith(ray, Point(0.0, 0.0, 0.0), intersection);
 
    if (!intersection.intersects())
       return;
@@ -108,12 +108,12 @@ void rayTraceRay(Shape& scene, vector<Light> lights, const Line& ray,
       shadowRay.set(pt, lights[i].position());
       Intersection shadowIntersection;
 
-      scene.intersection(shadowRay, Point(0.0, 0.0, 0.0), shadowIntersection);
+      scene.doIIntersectWith(shadowRay, Point(0.0, 0.0, 0.0), shadowIntersection);
 
       if (!shadowIntersection.intersects()
             || !shadowIntersection.material().transparency().isZero())
       {
-         lColor = attenuation(shadowRay.length()) * lights[i].color();
+         lColor = attenuate(shadowRay.length()) * lights[i].color();
          color += (material.ambient() % lColor)
                + abs(intersection.normal() & shadowRay.direction())
                      * (material.diffuse() % lColor)
@@ -132,20 +132,19 @@ void rayTraceRay(Shape& scene, vector<Light> lights, const Line& ray,
 
       if (!transparency.isZero() && transparency.length() > SMALL_NUMBER) //if not transparent then don't send ray
       {
-         rayTraceRay(scene, lights, transmittedRay, transmittedColor,
-               depth - 1);
+         traceRay(scene, lights, transmittedRay, transmittedColor, depth - 1);
          color += (transparency % transmittedColor);
       }
       if (!opacity.isZero()) // if completely transparent don't send reflect ray
       {
-         rayTraceRay(scene, lights, reflectedRay, reflectedColor, depth - 1);
+         traceRay(scene, lights, reflectedRay, reflectedColor, depth - 1);
          color += (opacity % reflectedColor);
       }
    }
 }
 
 /*
- PURPOSE: Does the ray-tracing of a shape according to the supplied lights, camera dimension and screen dimensions
+ PURPOSE: Does the ray-tracing scene objects according to the supplied lights, camera dimension and screen dimensions
  RECEIVES:
  scene --  Shape to be ray-traced (Shapes use the Composite pattern so are made of sub-shapes
  light -- a vector of Light's used to light the scene
@@ -159,7 +158,7 @@ void rayTraceRay(Shape& scene, vector<Light> lights, const Line& ray,
  RETURNS:  Nothing
  REMARKS:
  */
-void rayTraceScreen(Shape& scene, vector<Light>& lights, Point camera,
+void traceRayScreen(Shape& scene, vector<Light>& lights, Point camera,
       Point lookAt, Point up, int bottomX, int bottomY, int width, int height)
 {
    Point lookDirection = lookAt - camera;
@@ -188,11 +187,11 @@ void rayTraceScreen(Shape& scene, vector<Light>& lights, Point camera,
       {
          for (k = 0.0; k < SUPER_SAMPLE_NUMBER; k++)
          {
-            ray.set(camera, screenPt + .5 * randomUnit());
+            ray.set(camera, screenPt + .5 * randomlyPoint());
 
             color.set(0.0, 0.0, 0.0);
 
-            rayTraceRay(scene, lights, ray, color, MAX_DEPTH);
+            traceRay(scene, lights, ray, color, MAX_DEPTH);
 
             oldWeightedColor = (k + 1.0) * avgColor;
 
@@ -203,7 +202,6 @@ void rayTraceScreen(Shape& scene, vector<Light>& lights, Point camera,
                   < SMALL_NUMBER * k * (k + 1))
                break;
          }
-         //if ( k <  SUPER_SAMPLE_NUMBER && k >1) cout <<"hello"<<k<<endl;
 
          avgColor /= k;
          glColor3d(avgColor.x(), avgColor.y(), avgColor.z());
@@ -225,15 +223,14 @@ void rayTraceScreen(Shape& scene, vector<Light>& lights, Point camera,
  RETURNS: Nothing
  REMARKS:
  */
-Point convertStringCoordinate(string coordString)
+Point stringToCoord(string str)
 {
    Point firstSquare(-BOARD_EDGE_SIZE / 2, 0.0, BOARD_EDGE_SIZE / 2);
 
-   Point rowOffset(0.0, 0.0,
-         -(double(coordString[0] - 'a') + .5) * SQUARE_EDGE_SIZE);
+   Point rowOffset(0.0, 0.0, -(double(str[0] - 'a') + .5) * SQUARE_EDGE_SIZE);
    //negative because farther back == higher row number
-   Point colOffset((double(coordString[1] - '0' - 1) + .5) * SQUARE_EDGE_SIZE,
-         0.0, 0.0);
+   Point colOffset((double(str[1] - '0' - 1) + .5) * SQUARE_EDGE_SIZE, 0.0,
+         0.0);
    Point heightOffset(0.0, 1.5 * SQUARE_EDGE_SIZE, 0.0);
 
    Point square = firstSquare + rowOffset + colOffset + heightOffset;
@@ -250,13 +247,8 @@ Point convertStringCoordinate(string coordString)
  RETURNS: Nothing
  REMARKS:
  */
-void getInput()
+void showObjectsMenu()
 {
-   //make board
-   Point boardPosition(0.0, 0.0, 0.0);
-   CheckerBoard *checkerBoard = new CheckerBoard(boardPosition);
-   scene.addRayObject(checkerBoard);
-
    //make objects
    string tmp;
    while (tmp != "done")
@@ -273,44 +265,43 @@ void getInput()
                Light(lightColor,
                      Point(BOARD_POSITION)
                            + Point(0.0, 3.5 * SQUARE_EDGE_SIZE, 0.0)
-                           + convertStringCoordinate(tmp)));
+                           + stringToCoord(tmp)));
       }
 
       else if (tmp == "tetrahedron")
       {
          cout << "enter the position of the tetrahedron:\n";
          cin >> tmp;
-         Tetrahedron *tetrahedron = new Tetrahedron(
-               convertStringCoordinate(tmp), SQUARE_EDGE_SIZE);
+         Tetrahedron *tetrahedron = new Tetrahedron(stringToCoord(tmp),
+               SQUARE_EDGE_SIZE);
          scene.addRayObject(tetrahedron);
       }
       else if (tmp == "sphere")
       {
          cout << "enter the position of the sphere:\n";
          cin >> tmp;
-         Sphere *sphere = new Sphere(convertStringCoordinate(tmp),
-               SQUARE_EDGE_SIZE / 2);
+         Sphere *sphere = new Sphere(stringToCoord(tmp), SQUARE_EDGE_SIZE / 2);
          scene.addRayObject(sphere);
       }
       else if (tmp == "cube")
       {
          cout << "enter the position of the cube:\n";
          cin >> tmp;
-         Cube *cube = new Cube(convertStringCoordinate(tmp), SQUARE_EDGE_SIZE);
+         Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
          scene.addRayObject(cube);
       }
       else if (tmp == "cone")
       {
          cout << "enter the position of the cube:\n";
          cin >> tmp;
-         Cube *cube = new Cube(convertStringCoordinate(tmp), SQUARE_EDGE_SIZE);
+         Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
          scene.addRayObject(cube);
       }
       else if (tmp == "cylinder")
       {
          cout << "enter the position of the cube:\n";
          cin >> tmp;
-         Cube *cube = new Cube(convertStringCoordinate(tmp), SQUARE_EDGE_SIZE);
+         Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
          scene.addRayObject(cube);
       }
    }
@@ -339,13 +330,17 @@ void SdlApp::clearCanvas()
  */
 void SdlApp::draw()
 {
+   traceRayScreen(scene, lights, Point(CAMERA_POSITION), Point(LOOK_AT_VECTOR),
+         Point(UP_VECTOR), -winWidth / 2, -winHeight / 2, winWidth, winHeight);
+}
 
-   Point camera(CAMERA_POSITION);
-   Point lookAt(LOOK_AT_VECTOR);
-   Point up(UP_VECTOR);
+void makeObjects()
+{
+   //make board
+   scene.addRayObject(new CheckerBoard(Point(0, 0, 0)));
 
-   rayTraceScreen(scene, lights, camera, lookAt, up, -winWidth / 2,
-         -winHeight / 2, winWidth, winHeight);
+   //make objects
+   showObjectsMenu();
 }
 
 /* PURPOSE: Creates an sdl application.
@@ -375,11 +370,9 @@ SdlApp::SdlApp()
    glClearDepth(0);
    glEnable(GL_DEPTH_TEST);
    glDepthFunc(GL_GREATER);
-   glEnable(GL_MULTISAMPLE); //enable oversampling
-   getInput();
 
    //makeShaders();
-   //makeObjects();
+   makeObjects();
    //makeTextures();
 }
 

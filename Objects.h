@@ -3,7 +3,7 @@
 class RayObject;
 
 /*---------------------------------------------------------------------------*/
-/*   CONSTANTS */
+/*  VARIABLES */
 //lighting
 const GLdouble WHITE[3] =
 { 1.0, 1.0, 1.0 }; //RGB for white
@@ -35,10 +35,14 @@ const unsigned int MAX_DEPTH = 5; // maximum depth our ray-tracing tree should g
 const GLdouble SMALL_NUMBER = .0001; // used rather than check with zero to avoid round-off problems 
 const GLdouble SUPER_SAMPLE_NUMBER = 16; // how many random rays per pixel
 
+//window
+GLsizei winWidth = 500, winHeight = 500; // used for size of window
+GLsizei initX = 0, initY = 0; // used for initial position of window
+
 /*---------------------------------------------------------------------------*/
 /* CLASS DEFINITIONS */
 /*
- PURPOSE: Used to encapsulate the properties and operations
+ PURPOSE: encapsulate properties and operations
  for 3 dimension points/vectors used to describe our scene
  REMARK: Many of the operations for Points will be used very often
  during ray-tracing. Since they are short and we want them to be inlined
@@ -185,8 +189,13 @@ public:
    }
 };
 
+Point whiteColor(WHITE); // some abbreviations for various colors
+Point blackColor(BLACK);
+Point redColor(RED);
+Point lightColor(WHITE); // color of the light
+
 /*
- PURPOSE: Use to encapsulate information about a
+ PURPOSE: encapsulate information about a
  light (basically its color and position) in our scene
  to be ray-traced
  REMARK:
@@ -215,7 +224,7 @@ public:
 };
 
 /*
- PURPOSE: Used to encapsulate information about lines in our scene
+ PURPOSE: encapsulate information about lines in our scene
  REMARK:
  A ray that will be ray traced will be such a line
  We will adopt the convention that the _startPoint of such a line is
@@ -270,7 +279,7 @@ public:
 };
 
 /*
- PURPOSE: Used to hold information about how a Shape
+ PURPOSE: storage of info about how a Shape
  will react to various kinds of light in our lighting model
  REMARK:
  We use the Phong lighting model as the basis for calculating
@@ -332,8 +341,17 @@ public:
    }
 };
 
+Material sphereMaterial(blackColor, .1 * whiteColor, whiteColor, blackColor, 1);
+Material tetrahedronMaterial(blackColor, blackColor, .1 * whiteColor,
+      whiteColor, 2.0 / 3.0);
+Material cubeMaterial(.1 * redColor, .4 * redColor, redColor, blackColor, 1);
+Material whiteSquare(.1 * whiteColor, .5 * whiteColor, whiteColor, blackColor,
+      1);
+// some materials used by objects in  the scene
+Material blackSquare(blackColor, .1 * whiteColor, blackColor, blackColor, 1);
+
 /*
- PURPOSE: used to store information about how a ray intersects with a RayObject.
+ PURPOSE: storage of information about how a ray intersects with a RayObject.
  REMARK:
  A flag is used to say if there was any intersection at all. If there is an intersection
  objects of this class store what was the material of the object that was intersected as well
@@ -424,7 +442,7 @@ public:
 };
 
 /*
- PURPOSE: abstract class which serves as a base for
+ PURPOSE: abstract class serving a base for
  all objects to be drawn in our ray-traced scene
  REMARK:
  */
@@ -439,7 +457,7 @@ public:
       _position = p;
       _material = m;
    }
-   virtual void intersection(const Line& l, const Point& positionOffset,
+   virtual void doIIntersectWith(const Line& l, const Point& positionOffset,
          Intersection& inter) = 0;
    // by overriding intersection in different ways control how rays hit objects in our scene
 };
@@ -499,15 +517,109 @@ public:
          _degenerate = true;
    }
 
-   void intersection(const Line& l, const Point& positionOffset,
-         Intersection& inter);
+   /*
+    PURPOSE: fill in an Intersection object with information about how the supplied ray
+    intersects with the current Triangle based on the given positionOffset Point vector.
+    RECEIVES:
+    ray -- ray to intersect with this Triangle
+    positionOffset -- where in the overall scene this Triangle lives
+    inter -- Intersection object to fill in with information about the if and where the ray
+    intersects
+    RETURNS:
+    REMARKS:
+    The idea for the following way to test for triangle intersections was
+    gotten from
+    http://softsurfer.com/Archive/algorithm_0105/algorithm_0105.htm
+
+    Later noticed was in books already had like 3D Computer Graphics by Sam Buss.
+    The coding of it is my own.
+
+    Degenerate cases handle by saying there is no intersection
+    */
+   void doIIntersectWith(const Line& ray, const Point& positionOffset,
+         Intersection& inter)
+   {
+      if (_degenerate)
+      {
+         inter.setIntersect(false);
+         return;
+      }
+
+      //get coordinates of triangle given our position
+      Point position = _position + positionOffset;
+      Point v = position + _vertex0;
+
+      Point p0 = ray.startPoint();
+      Point p1 = ray.endPoint();
+      Point diffP = p1 - p0;
+      GLdouble ndiffP = _n & diffP;
+
+      //handle another degenerate case by saying we don't intersect
+      if (abs(ndiffP) < SMALL_NUMBER)
+      {
+         inter.setIntersect(false);
+         return;
+      }
+
+      GLdouble m = (_n & (v - p0)) / (_n & diffP);
+
+      if (m < SMALL_NUMBER) //if m is negative then we don't intersect
+      {
+         inter.setIntersect(false);
+         return;
+      }
+
+      Point p = p0 + m * diffP; //intersection point with plane
+
+      Point w = p - v;
+
+      //Now check if in triangle
+      GLdouble wu = w & _u;
+      GLdouble wv = w & _v;
+
+      GLdouble s = (_uv * wv - _vv * wu) / _denominator;
+      GLdouble t = (_uv * wu - _uu * wv) / _denominator;
+
+      if (s >= 0 && t >= 0 && s + t <= 1) // intersect
+      {
+         diffP.normalize(); // now u is as in the book
+         Point u = diffP;
+
+         Point r = u - (2 * (u & _n)) * _n;
+         Line reflected(p, p + r);
+
+         //Transmitted vector calculated using thin lens equations from book
+         GLdouble refractionRatio = _material.refraction();
+
+         Point t(0.0, 0.0, 0.0);
+
+         GLdouble cosThetai = u & _n;
+         GLdouble modulus = 1
+               - refractionRatio * refractionRatio
+                     * (1 - cosThetai * cosThetai);
+
+         if (modulus > 0)
+         {
+            GLdouble cosThetar = sqrt(modulus);
+            t = refractionRatio * u
+                  - (cosThetar + refractionRatio * cosThetai) * _n;
+         }
+
+         Line transmitted(p, p + t);
+         inter.setValues(true, p, _n, _material, reflected, transmitted);
+      }
+      else // don't intersect
+      {
+         inter.setIntersect(false);
+      }
+   }
 };
 
 /*
- PURPOSE: Shape's are either composite objects which represent a part of the scene
+ PURPOSE: Shapes are either composite objects which represent a part of the scene
  to be ray-traced or our primary objects in which case they are used to model sphere's
  in our scene
- REMARK:  Triangle's and Shape's are used according to a Composite design pattern to
+ REMARK:  Triangles and Shapes are used according to a Composite design pattern to
  define objects in our scene
  */
 class Shape: public RayObject
@@ -535,7 +647,19 @@ public:
       _subObjects.clear();
    }
 
-   ~Shape();
+   /*
+    PURPOSE: destructs this shape and gets rid of any sub-object on it
+    RECEIVES: nothing
+    RETURNS: nothing
+    REMARKS:
+    */
+   ~Shape()
+   {
+      for (size_t i = 0; i < _subObjects.size(); i++)
+      {
+         delete _subObjects[i];
+      }
+   }
 
    void setRadius(GLdouble r)
    {
@@ -547,9 +671,111 @@ public:
       _subObjects.push_back(objects);
    }
 
-   void intersection(const Line& l, const Point& positionOffset,
-         Intersection& inter);
+   /*
+    PURPOSE: used to fill in an Intersection object with information about how the supplied ray
+    intersects with the current Shape based on the given positionOffset Point vector.
+    RECEIVES:
+    ray -- ray to intersect with this Shape
+    positionOffset -- where in the overall scene this Shape lives
+    inter -- Intersection object to fill in with information about the if and where the ray
+    intersects
+    RETURNS:
+    REMARKS: note this Shape could be a composite object so we recurse through its _subObjects vector
+    */
+   void doIIntersectWith(const Line& ray, const Point& positionOffset,
+         Intersection& inter)
+   {
+      Point u = ray.direction();
+      Point p0 = ray.startPoint();
+      Point position = _position + positionOffset;
+      Point deltaP = position - p0;
+      /* check for sphere intersection if radius is > 0.
+       if radius ==0 assume we are dealing with a object which has
+       subObjects which do the testing
+       */
+      if (_radius > 0 || _amSphere)
+      {
+         GLdouble uDeltaP = u & deltaP;
+         GLdouble discriminant = uDeltaP * uDeltaP - (deltaP & deltaP)
+               + _radius * _radius;
+
+         GLdouble s = uDeltaP - sqrt(discriminant); //other solution is on far side of sphere
+
+         if (discriminant < 0 || abs(s) < SMALL_NUMBER)
+         {
+            inter.setIntersect(false);
+            return;
+         }
+
+         //calculate point of intersection
+         Point p = p0 + s * u;
+         Point directionP0 = p - position;
+
+         if (_amSphere)
+         {
+            if (s < SMALL_NUMBER) // if not in front of ray then don't intersect
+            {
+               inter.setIntersect(false);
+               return;
+            }
+
+            //reflected vector calculated using equations from book
+            Point n(directionP0);
+            n.normalize();
+
+            Point r = u - (2 * (u & n)) * n;
+            Line reflected(p, p + r);
+
+            //Transmitted vector calculated using thin lens equations from book
+            Point t(0.0, 0.0, 0.0);
+            GLdouble refractionRatio = _material.refraction();
+            GLdouble cosThetai = u & n;
+            GLdouble modulus = 1
+                  - refractionRatio * refractionRatio
+                        * (1 - cosThetai * cosThetai);
+
+            if (modulus > 0)
+            {
+               GLdouble cosThetar = sqrt(modulus);
+               t = refractionRatio * u
+                     - (cosThetar + refractionRatio * cosThetai) * n;
+            }
+            Line transmitted(p, p + t);
+            inter.setValues(true, p, n, _material, reflected, transmitted);
+         }
+      }
+
+      if (!_amSphere)
+      {
+         inter.setIntersect(false);
+         Intersection interTmp;
+
+         GLdouble minDistance = -1.0;
+         GLdouble distanceTmp;
+         size_t size = _subObjects.size();
+         for (size_t i = 0; i < size; i++)
+         {
+            _subObjects[i]->doIIntersectWith(ray, position, interTmp);
+
+            if (interTmp.intersects())
+            {
+               Point directionCur = interTmp.point() - p0;
+               distanceTmp = directionCur.length();
+               if (distanceTmp < minDistance || minDistance < 0.0)
+               {
+                  minDistance = distanceTmp;
+                  inter.setValues(interTmp);
+                  if (_canIntersectOnlyOneSubObject)
+                     return;
+               }
+            }
+         }
+      }
+   }
 };
+
+Shape scene(BOARD_POSITION, Material(), sqrt((double) 3) * BOARD_HALF_SIZE,
+      false); // global shape for whole scene
 
 /*
  PURPOSE: encapsulate information about quadrilaterals
@@ -561,7 +787,24 @@ public:
 class Quad: public Shape
 {
 public:
-   Quad(Point p, Material m, Point p1, Point p2, Point p3, Point p4);
+   /*
+    PURPOSE: construct a Quad object (for quadralateral) at the given offset position made of
+    the given material and with the supplied points
+    RECEIVES:
+    p -- position offset into our scene
+    m -Material Quad is made out of
+    p1, p2, p3, p4 - four local coordinate points (relative to p) that make up the Quad.
+    RETURNS:
+    REMARKS: can only intersect one of two sub-triangles unless ray is same plane as Quad
+    */
+   Quad(Point p, Material m, Point p1, Point p2, Point p3, Point p4) :
+         Shape(p, m, 0, false, true)
+   {
+      Point zero(0.0, 0.0, 0.0);
+
+      addRayObject(new Triangle(zero, m, p1, p2, p3));
+      addRayObject(new Triangle(zero, m, p1, p3, p4));
+   }
 };
 
 /*
@@ -570,10 +813,50 @@ public:
  REMARK:
  */
 class Tetrahedron: public Shape
-
 {
 public:
-   Tetrahedron(Point p, GLdouble edgeSize);
+   /*
+    PURPOSE: construct a Tetrahedron at the given offset position and edgeSize in our Scene
+    RECEIVES:
+    p -- position offset into our scene
+    edgeSize -- size of an edge of our cube
+    RETURNS: a Tetrahedron object
+    REMARKS:  note tetrahedronMaterial is a global in this file.
+    Since the HW description didn't say the tetrahedron was regular, we took the tetrahedron to be the
+    one obtained by slicing the cube from a top corner through the diagonal of the bottom face
+    */
+   Tetrahedron(Point p, GLdouble edgeSize) :
+         Shape(p, tetrahedronMaterial, sqrt((double) 3) * edgeSize / 2, false)
+   {
+      Point zero(0.0, 0.0, 0.0);
+      GLdouble halfEdge = edgeSize / 2;
+
+      //bottom
+      addRayObject(
+            new Triangle(zero, tetrahedronMaterial,
+                  Point(-halfEdge, -halfEdge, -halfEdge),
+                  Point(halfEdge, -halfEdge, -halfEdge),
+                  Point(-halfEdge, -halfEdge, halfEdge)));
+      //back
+      addRayObject(
+            new Triangle(zero, tetrahedronMaterial,
+                  Point(-halfEdge, -halfEdge, -halfEdge),
+                  Point(-halfEdge, -halfEdge, halfEdge),
+                  Point(-halfEdge, halfEdge, -halfEdge)));
+
+      //left
+      addRayObject(
+            new Triangle(zero, tetrahedronMaterial,
+                  Point(-halfEdge, -halfEdge, -halfEdge),
+                  Point(-halfEdge, halfEdge, -halfEdge),
+                  Point(-halfEdge, -halfEdge, halfEdge)));
+      //front
+      addRayObject(
+            new Triangle(zero, tetrahedronMaterial,
+                  Point(-halfEdge, -halfEdge, halfEdge),
+                  Point(halfEdge, -halfEdge, -halfEdge),
+                  Point(-halfEdge, halfEdge, -halfEdge)));
+   }
 };
 
 /*
@@ -582,21 +865,87 @@ public:
  REMARK:
  */
 class Sphere: public Shape
-
 {
 public:
-   Sphere(Point p, GLdouble radius);
+   /*
+    PURPOSE: construct a Sphere object at the given offset position and radius in our Scene
+    RECEIVES:
+    p -- position offset into our scene
+    r -- radius of Sphere
+    RETURNS: a Sphere object
+    REMARKS:  sphereMaterial is a global in this file.
+    The constructor mainly just calls the base constructor with the appropriate material
+    and with the flag for Shape telling the Shape that it is a non-composite
+    sphere (the last paramter true to the Shape constructor)
+    */
+   Sphere(Point p, GLdouble r) :
+         Shape(p, sphereMaterial, r, true)
+   {
+   }
 };
 
 /*
- PURPOSE: encapsulates information about
+ PURPOSE: encapsulate information about
  cubes to be drawn in our scene (in this case just one)
  REMARK:
  */
 class Cube: public Shape
 {
 public:
-   Cube(Point p, GLdouble edgeSize);
+   /*
+    PURPOSE: constructs a Cube at the given offset position and edgeSize in our Scene
+    RECEIVES:
+    p -- position offset into our scene
+    edgeSize -- size of an edge of our cube
+    RETURNS: a cube object
+    REMARKS:  note cubeMaterial is a global in this file
+    */
+   Cube(Point p, GLdouble edgeSize) :
+         Shape(p, cubeMaterial, sqrt((double) 3) * edgeSize / 2, false)
+   {
+      GLdouble halfEdge = edgeSize / 2;
+
+      Point zero(0.0, 0.0, 0.0);
+      //top
+      addRayObject(
+            new Quad(zero, cubeMaterial, Point(-halfEdge, halfEdge, -halfEdge),
+                  Point(halfEdge, halfEdge, -halfEdge),
+                  Point(halfEdge, halfEdge, halfEdge),
+                  Point(-halfEdge, halfEdge, halfEdge)));
+
+      //bottom
+      addRayObject(
+            new Quad(zero, cubeMaterial, Point(-halfEdge, -halfEdge, -halfEdge),
+                  Point(halfEdge, -halfEdge, -halfEdge),
+                  Point(halfEdge, -halfEdge, halfEdge),
+                  Point(-halfEdge, -halfEdge, halfEdge)));
+
+      //left
+      addRayObject(
+            new Quad(zero, cubeMaterial, Point(-halfEdge, -halfEdge, -halfEdge),
+                  Point(-halfEdge, halfEdge, -halfEdge),
+                  Point(-halfEdge, halfEdge, halfEdge),
+                  Point(-halfEdge, -halfEdge, halfEdge)));
+      //right
+      addRayObject(
+            new Quad(zero, cubeMaterial, Point(halfEdge, -halfEdge, -halfEdge),
+                  Point(halfEdge, halfEdge, -halfEdge),
+                  Point(halfEdge, halfEdge, halfEdge),
+                  Point(halfEdge, -halfEdge, halfEdge)));
+      //back
+      addRayObject(
+            new Quad(zero, cubeMaterial, Point(-halfEdge, -halfEdge, -halfEdge),
+                  Point(halfEdge, -halfEdge, -halfEdge),
+                  Point(halfEdge, halfEdge, -halfEdge),
+                  Point(-halfEdge, halfEdge, -halfEdge)));
+
+      //front
+      addRayObject(
+            new Quad(zero, cubeMaterial, Point(-halfEdge, -halfEdge, halfEdge),
+                  Point(halfEdge, -halfEdge, halfEdge),
+                  Point(halfEdge, halfEdge, halfEdge),
+                  Point(-halfEdge, halfEdge, halfEdge)));
+   }
 };
 
 /*
@@ -610,435 +959,56 @@ private:
    Quad _boundingSquare; /* this Quad is used for a quick test to see if a
     ray intersects our chessboard */
 public:
-   CheckerBoard(Point p);
-   void intersection(const Line& l, const Point& positionOffset,
-         Intersection& inter);
+
+   /*
+    PURPOSE: constructs a Checkerboard object at the supplied offset position
+    RECEIVES:
+    p - offset position to put chess board at
+    RETURNS:
+    REMARKS: This constructor makes use of some constant in this file concerning the
+    chessboard.
+    */
+   CheckerBoard(Point p) :
+         Shape(), _boundingSquare(p, Material(),
+               Point(-BOARD_HALF_SIZE, 0, -BOARD_HALF_SIZE),
+               Point(BOARD_HALF_SIZE, 0, -BOARD_HALF_SIZE),
+               Point(BOARD_HALF_SIZE, 0, BOARD_HALF_SIZE),
+               Point(-BOARD_HALF_SIZE, 0, BOARD_HALF_SIZE)) /*initialize
+    bounding square to be used for quick tests if ray intersects
+    chess board */
+   {
+   }
+   /*
+    PURPOSE: used to calculate how a ray intersects with a Chessboard object
+    RECEIVES:
+    ray to bounce off of chessboard
+    positionoOffset - offset vector for location of chessboard
+    inter -- an Intersection object to be filled in with details on if and where ray intersects
+    with Chessboard
+    RETURNS: nothing
+    REMARKS:
+    */
+   void doIIntersectWith(const Line& ray, const Point& positionOffset,
+         Intersection& intersection)
+   {
+      _boundingSquare.doIIntersectWith(ray, positionOffset, intersection);
+
+      if (intersection.intersects())
+      {
+         Point p = intersection.point() - positionOffset
+               + Point(BOARD_HALF_SIZE, 0, BOARD_HALF_SIZE);
+         int squareSum = int(p.x() / SQUARE_EDGE_SIZE)
+               + int(p.z() / SQUARE_EDGE_SIZE);
+
+         if ((squareSum & 1) == 0)
+         {
+            intersection.setMaterial(whiteSquare);
+         }
+         else
+         {
+            intersection.setMaterial(blackSquare);
+         }
+      }
+   }
 };
 
-/*---------------------------------------------------------------------------*/
-/* GLOBALS */
-GLsizei winWidth = 500, winHeight = 500; // used for size of window
-GLsizei initX = 50, initY = 50; // used for initial position of window
-Point lightColor(WHITE); // color of the light
-
-Point whiteColor(WHITE); // some abbreviations for various colors
-Point blackColor(BLACK);
-Point redColor(RED);
-Material whiteSquare(.1 * whiteColor, .5 * whiteColor, whiteColor, blackColor,
-      1);
-// some materials used by objects in  the scene
-Material blackSquare(blackColor, .1 * whiteColor, blackColor, blackColor, 1);
-Material sphereMaterial(blackColor, .1 * whiteColor, whiteColor, blackColor, 1);
-Material tetrahedronMaterial(blackColor, blackColor, .1 * whiteColor,
-      whiteColor, 2.0 / 3.0);
-Material cubeMaterial(.1 * redColor, .4 * redColor, redColor, blackColor, 1);
-Shape scene(BOARD_POSITION, Material(), sqrt((double) 3) * BOARD_HALF_SIZE,
-      false); // global shape for whole scene
-
-/*---------------------------------------------------------------------------*/
-/*   IMPLEMENTATIONS */
-//Triangle Class Implementations
-/*
- PURPOSE: used to fill in an Intersection object with information about how the supplied ray
- intersects with the current Triangle based on the given positionOffset Point vector.
- RECEIVES:
- ray -- ray to intersect with this Triangle
- positionOffset -- where in the overall scene this Triangle lives
- inter -- Intersection object to fill in with information about the if and where the ray
- intersects
- RETURNS:
- REMARKS:
- The idea for the following way to test for triangle intersections was
- gotten from
- http://softsurfer.com/Archive/algorithm_0105/algorithm_0105.htm
-
- Later noticed was in books already had like 3D Computer Graphics by Sam Buss.
- The coding of it is my own.
-
- Degenerate cases handle by saying there is no intersection
- */
-void Triangle::intersection(const Line& ray, const Point& positionOffset,
-      Intersection& inter)
-{
-   if (_degenerate)
-   {
-      inter.setIntersect(false);
-      return;
-   }
-
-   //get coordinates of triangle given our position
-   Point position = _position + positionOffset;
-   Point v0 = position + _vertex0;
-   Point v1 = position + _vertex1;
-   Point v2 = position + _vertex2;
-
-   Point p0 = ray.startPoint();
-   Point p1 = ray.endPoint();
-   Point diffP = p1 - p0;
-   GLdouble ndiffP = _n & diffP;
-
-   //handle another degenerate case by saying we don't intersect
-   if (abs(ndiffP) < SMALL_NUMBER)
-   {
-      inter.setIntersect(false);
-      return;
-   }
-
-   GLdouble m = (_n & (v0 - p0)) / (_n & diffP);
-
-   if (m < SMALL_NUMBER) //if m is negative then we don't intersect
-   {
-      inter.setIntersect(false);
-      return;
-   }
-
-   Point p = p0 + m * diffP; //intersection point with plane
-
-   Point w = p - v0;
-
-   //Now check if in triangle      
-   GLdouble wu = w & _u;
-   GLdouble wv = w & _v;
-
-   GLdouble s = (_uv * wv - _vv * wu) / _denominator;
-   GLdouble t = (_uv * wu - _uu * wv) / _denominator;
-
-   if (s >= 0 && t >= 0 && s + t <= 1) // intersect
-   {
-      diffP.normalize(); // now u is as in the book
-      Point u = diffP;
-
-      Point r = u - (2 * (u & _n)) * _n;
-      Line reflected(p, p + r);
-
-      //Transmitted vector calculated using thin lens equations from book
-      GLdouble refractionRatio = _material.refraction();
-
-      Point t(0.0, 0.0, 0.0);
-
-      GLdouble cosThetai = u & _n;
-      GLdouble modulus = 1
-            - refractionRatio * refractionRatio * (1 - cosThetai * cosThetai);
-
-      if (modulus > 0)
-      {
-         GLdouble cosThetar = sqrt(modulus);
-         t = refractionRatio * u
-               - (cosThetar + refractionRatio * cosThetai) * _n;
-      }
-
-      Line transmitted(p, p + t);
-      inter.setValues(true, p, _n, _material, reflected, transmitted);
-   }
-   else // don't intersect
-   {
-      inter.setIntersect(false);
-   }
-}
-
-//Shape Class Implementations
-/*
- PURPOSE: destructs this shape and gets rid of any sub-object on it
- RECEIVES: nothing
- RETURNS: nothing
- REMARKS:
- */
-Shape::~Shape()
-{
-   for (size_t i = 0; i < _subObjects.size(); i++)
-   {
-      delete _subObjects[i];
-   }
-}
-
-/*
- PURPOSE: used to fill in an Intersection object with information about how the supplied ray
- intersects with the current Shape based on the given positionOffset Point vector.
- RECEIVES:
- ray -- ray to intersect with this Shape
- positionOffset -- where in the overall scene this Shape lives
- inter -- Intersection object to fill in with information about the if and where the ray
- intersects
- RETURNS:
- REMARKS: note this Shape could be a composite object so we recurse through its _subObjects vector
- */
-void Shape::intersection(const Line& ray, const Point& positionOffset,
-      Intersection& inter)
-{
-   Point u = ray.direction();
-   Point p0 = ray.startPoint();
-   Point position = _position + positionOffset;
-   Point deltaP = position - p0;
-   /* check for sphere intersection if radius is > 0.
-    if radius ==0 assume we are dealing with a object which has
-    subObjects which do the testing
-    */
-   if (_radius > 0 || _amSphere)
-   {
-      GLdouble uDeltaP = u & deltaP;
-      GLdouble discriminant = uDeltaP * uDeltaP - (deltaP & deltaP)
-            + _radius * _radius;
-
-      GLdouble s = uDeltaP - sqrt(discriminant); //other solution is on far side of sphere
-
-      if (discriminant < 0 || abs(s) < SMALL_NUMBER)
-      {
-         inter.setIntersect(false);
-         return;
-      }
-
-      //calculate point of intersection
-      Point p = p0 + s * u;
-      Point directionP0 = p - position;
-
-      if (_amSphere)
-      {
-         if (s < SMALL_NUMBER) // if not in front of ray then don't intersect
-         {
-            inter.setIntersect(false);
-            return;
-         }
-
-         //reflected vector calculated using equations from book
-         Point n(directionP0);
-         n.normalize();
-
-         Point r = u - (2 * (u & n)) * n;
-         Line reflected(p, p + r);
-
-         //Transmitted vector calculated using thin lens equations from book
-         Point t(0.0, 0.0, 0.0);
-         GLdouble refractionRatio = _material.refraction();
-         GLdouble cosThetai = u & n;
-         GLdouble modulus = 1
-               - refractionRatio * refractionRatio
-                     * (1 - cosThetai * cosThetai);
-
-         if (modulus > 0)
-         {
-            GLdouble cosThetar = sqrt(modulus);
-            t = refractionRatio * u
-                  - (cosThetar + refractionRatio * cosThetai) * n;
-         }
-         Line transmitted(p, p + t);
-         inter.setValues(true, p, n, _material, reflected, transmitted);
-      }
-   }
-
-   if (!_amSphere)
-   {
-      inter.setIntersect(false);
-      Intersection interTmp;
-
-      GLdouble minDistance = -1.0;
-      GLdouble distanceTmp;
-      size_t size = _subObjects.size();
-      for (size_t i = 0; i < size; i++)
-      {
-         _subObjects[i]->intersection(ray, position, interTmp);
-
-         if (interTmp.intersects())
-         {
-            Point directionCur = interTmp.point() - p0;
-            distanceTmp = directionCur.length();
-            if (distanceTmp < minDistance || minDistance < 0.0)
-            {
-               minDistance = distanceTmp;
-               inter.setValues(interTmp);
-               if (_canIntersectOnlyOneSubObject)
-                  return;
-            }
-         }
-      }
-   }
-}
-
-//Quad Class Implementations
-/*
- PURPOSE: constructs a Quad object (for quadralateral) at the given offset position made of
- the given material and with the supplied points
- RECEIVES:
- p -- position offset into our scene
- m -Material Quad is made out of
- p1, p2, p3, p4 - four local coordinate points (relative to p) that make up the Quad.
- RETURNS:
- REMARKS: can only intersect one of two sub-triangles unless ray is same plane as Quad
- */
-Quad::Quad(Point p, Material m, Point p1, Point p2, Point p3, Point p4) :
-      Shape(p, m, 0, false, true)
-{
-   Point zero(0.0, 0.0, 0.0);
-
-   addRayObject(new Triangle(zero, m, p1, p2, p3));
-   addRayObject(new Triangle(zero, m, p1, p3, p4));
-}
-
-//Sphere Class Implementations
-/*
- PURPOSE: constructs a Sphere object at the given offset position and radius in our Scene
- RECEIVES:
- p -- position offset into our scene
- r -- radius of Sphere
- RETURNS: a Sphere object
- REMARKS:  sphereMaterial is a global in this file.
- The constructor mainly just calls the base constructor with the appropriate material
- and with the flag for Shape telling the Shape that it is a non-composite
- sphere (the last paramter true to the Shape constructor)
- */
-Sphere::Sphere(Point p, GLdouble r) :
-      Shape(p, sphereMaterial, r, true)
-{
-}
-
-//Tetrahedron Class Implementations
-/*
- PURPOSE: constructs a Tetrahedron at the given offset position and edgeSize in our Scene
- RECEIVES:
- p -- position offset into our scene
- edgeSize -- size of an edge of our cube
- RETURNS: a Tetrahedron object
- REMARKS:  note tetrahedronMaterial is a global in this file.
- Since the HW description didn't say the tetrahedron was regular, we took the tetrahedron to be the
- one obtained by slicing the cube from a top corner through the diagonal of the bottom face
- */
-Tetrahedron::Tetrahedron(Point p, GLdouble edgeSize) :
-      Shape(p, tetrahedronMaterial, sqrt((double) 3) * edgeSize / 2, false)
-{
-   Point zero(0.0, 0.0, 0.0);
-   GLdouble halfEdge = edgeSize / 2;
-
-   //bottom
-   addRayObject(
-         new Triangle(zero, tetrahedronMaterial,
-               Point(-halfEdge, -halfEdge, -halfEdge),
-               Point(halfEdge, -halfEdge, -halfEdge),
-               Point(-halfEdge, -halfEdge, halfEdge)));
-   //back
-   addRayObject(
-         new Triangle(zero, tetrahedronMaterial,
-               Point(-halfEdge, -halfEdge, -halfEdge),
-               Point(-halfEdge, -halfEdge, halfEdge),
-               Point(-halfEdge, halfEdge, -halfEdge)));
-
-   //left
-   addRayObject(
-         new Triangle(zero, tetrahedronMaterial,
-               Point(-halfEdge, -halfEdge, -halfEdge),
-               Point(-halfEdge, halfEdge, -halfEdge),
-               Point(-halfEdge, -halfEdge, halfEdge)));
-   //front
-   addRayObject(
-         new Triangle(zero, tetrahedronMaterial,
-               Point(-halfEdge, -halfEdge, halfEdge),
-               Point(halfEdge, -halfEdge, -halfEdge),
-               Point(-halfEdge, halfEdge, -halfEdge)));
-}
-
-//Cube Class Implementations
-/*
- PURPOSE: constructs a Cube at the given offset position and edgeSize in our Scene
- RECEIVES:
- p -- position offset into our scene
- edgeSize -- size of an edge of our cube
- RETURNS: a cube object
- REMARKS:  note cubeMaterial is a global in this file
- */
-Cube::Cube(Point p, GLdouble edgeSize) :
-      Shape(p, cubeMaterial, sqrt((double) 3) * edgeSize / 2, false)
-{
-   GLdouble halfEdge = edgeSize / 2;
-
-   Point zero(0.0, 0.0, 0.0);
-   //top
-   addRayObject(
-         new Quad(zero, cubeMaterial, Point(-halfEdge, halfEdge, -halfEdge),
-               Point(halfEdge, halfEdge, -halfEdge),
-               Point(halfEdge, halfEdge, halfEdge),
-               Point(-halfEdge, halfEdge, halfEdge)));
-
-   //bottom
-   addRayObject(
-         new Quad(zero, cubeMaterial, Point(-halfEdge, -halfEdge, -halfEdge),
-               Point(halfEdge, -halfEdge, -halfEdge),
-               Point(halfEdge, -halfEdge, halfEdge),
-               Point(-halfEdge, -halfEdge, halfEdge)));
-
-   //left
-   addRayObject(
-         new Quad(zero, cubeMaterial, Point(-halfEdge, -halfEdge, -halfEdge),
-               Point(-halfEdge, halfEdge, -halfEdge),
-               Point(-halfEdge, halfEdge, halfEdge),
-               Point(-halfEdge, -halfEdge, halfEdge)));
-   //right
-   addRayObject(
-         new Quad(zero, cubeMaterial, Point(halfEdge, -halfEdge, -halfEdge),
-               Point(halfEdge, halfEdge, -halfEdge),
-               Point(halfEdge, halfEdge, halfEdge),
-               Point(halfEdge, -halfEdge, halfEdge)));
-   //back
-   addRayObject(
-         new Quad(zero, cubeMaterial, Point(-halfEdge, -halfEdge, -halfEdge),
-               Point(halfEdge, -halfEdge, -halfEdge),
-               Point(halfEdge, halfEdge, -halfEdge),
-               Point(-halfEdge, halfEdge, -halfEdge)));
-
-   //front
-   addRayObject(
-         new Quad(zero, cubeMaterial, Point(-halfEdge, -halfEdge, halfEdge),
-               Point(halfEdge, -halfEdge, halfEdge),
-               Point(halfEdge, halfEdge, halfEdge),
-               Point(-halfEdge, halfEdge, halfEdge)));
-}
-
-//CheckerBoard Class Implementations
-/*
- PURPOSE: constructs a Checkerboard object at the supplied offset position
- RECEIVES:
- p - offset position to put chess board at
- RETURNS:
- REMARKS: This constructor makes use of some constant in this file concerning the
- chessboard.
- */
-CheckerBoard::CheckerBoard(Point p) :
-      Shape(), _boundingSquare(p, Material(),
-            Point(-BOARD_HALF_SIZE, 0, -BOARD_HALF_SIZE),
-            Point(BOARD_HALF_SIZE, 0, -BOARD_HALF_SIZE),
-            Point(BOARD_HALF_SIZE, 0, BOARD_HALF_SIZE),
-            Point(-BOARD_HALF_SIZE, 0, BOARD_HALF_SIZE)) /*initialize
- bounding square to be used for quick tests if ray intersects
- chess board */
-{
-}
-
-/*
- PURPOSE: used to calculate how a ray intersects with a Chessboard object
- RECEIVES:
- ray to bounce off of chessboard
- positionoOffset - offset vector for location of chessboard
- inter -- an Intersection object to be filled in with details on if and where ray intersects
- with Chessboard
- RETURNS: nothing
- REMARKS:
- */
-void CheckerBoard::intersection(const Line& ray, const Point& positionOffset,
-      Intersection& inter)
-{
-   _boundingSquare.intersection(ray, positionOffset, inter);
-
-   if (inter.intersects())
-   {
-      Point p = inter.point() - positionOffset
-            + Point(BOARD_HALF_SIZE, 0, BOARD_HALF_SIZE);
-      int squareSum = int(p.x() / SQUARE_EDGE_SIZE)
-            + int(p.z() / SQUARE_EDGE_SIZE);
-
-      if ((squareSum & 1) == 0)
-      {
-         inter.setMaterial(whiteSquare);
-      }
-      else
-      {
-         inter.setMaterial(blackSquare);
-      }
-   }
-}
