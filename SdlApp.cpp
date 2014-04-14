@@ -271,6 +271,8 @@ void showObjectsMenu()
    //make objects
    string tmp;
    int found = 0; //used to break out of loop
+   vector<RayObject *>::iterator it;
+   vector<Light>::iterator it2;
    while (tmp != "done")
    {
       if (redoMenu == 0)
@@ -283,6 +285,27 @@ void showObjectsMenu()
 		 redoMenu = 1;
          cout << "Enter the position of the light:\n";
          cin >> tmp;
+
+		 for (it2 = lights.begin(); it2 != lights.end();)
+		 {
+				 if (found == 0)
+				 {
+					 if ((Point(BOARD_POSITION)
+                           + Point(0.0, 3.5 * SQUARE_EDGE_SIZE, 0.0)
+						   + stringToCoord(tmp)) == (*it2).position())
+					 {
+							cout<<"Overriding previous object at location with light\n";
+							it2 = lights.erase(it2);
+							found = 1;
+					 }
+					 else 
+						 ++it2;
+				 }
+				 else
+					 ++it2;
+		 }
+		 found = 0;
+
 		 //light is 5 squares above board
          lights.push_back(
                Light(lightColor,
@@ -298,6 +321,25 @@ void showObjectsMenu()
 		 cout << "enter the position of the tetrahedron:\n";
          cin >> tmp;
 		 
+		 for (it = scene.subObject().begin(); it != scene.subObject().end();)
+		 {
+				 if (found == 0)
+				 {
+					 if (stringToCoord(tmp) == (*it)->position())
+					 {
+							cout<<"Overriding previous object at location with tetrahedron\n";
+							delete *it;
+							it = scene.subObject().erase(it);
+							found = 1;
+					 }
+					 else
+						 ++it;
+				 }
+				 else
+					 ++it;
+		 }
+		 found = 0;
+
          Tetrahedron *tetrahedron = new Tetrahedron(stringToCoord(tmp),
                SQUARE_EDGE_SIZE);
          scene.addRayObject(tetrahedron);
@@ -308,29 +350,25 @@ void showObjectsMenu()
 		 redoMenu = 1;
          cout << "enter the position of the sphere:\n";
          cin >> tmp;
-         /*
-		 currentPosition.push_back(stringToCoord(tmp));
-
-		 for (int i = 0; i < scene.subObject().size(); i++)
+         
+		 for (it = scene.subObject().begin(); it != scene.subObject().end();)
 		 {
-			 for (int j = 0; j < currentPosition.size(); j++)
-			 {
 				 if (found == 0)
 				 {
-					 if (currentPosition.at(j) == scene.subObject().at(i)->position())
+					 if (stringToCoord(tmp) == (*it)->position())
 					 {
-								
-								cout << "Found\n";
-								//delete scene.subObject().at(i);
-								//scene.subObject().erase(scene.subObject().begin());
-								//currentPosition.erase(currentPosition.begin());
-								found = 1;
+							cout<<"Overriding previous object at location with sphere\n";
+							delete *it;
+							it = scene.subObject().erase(it);
+							found = 1;
 					 }
+					 else
+						 ++it;
 				 }
-			 }
+				 else
+					 ++it;
 		 }
 		 found = 0;
-		 */
 		 
 		 Sphere *sphere = new Sphere(stringToCoord(tmp), SQUARE_EDGE_SIZE / 2);
          scene.addRayObject(sphere);
@@ -341,28 +379,26 @@ void showObjectsMenu()
 		 redoMenu = 1;
          cout << "enter the position of the cube:\n";
          cin >> tmp;
-         /*
-		 currentPosition.push_back(stringToCoord(tmp));
-
-		 for (int i = 0; i < scene.subObject().size(); i++)
+         
+		for (it = scene.subObject().begin(); it != scene.subObject().end();)
 		 {
-			 for (int j = 0; j < currentPosition.size(); j++)
-			 {
 				 if (found == 0)
 				 {
-					 if (currentPosition.at(j) == scene.subObject().at(i)->position())
+					 if (stringToCoord(tmp) == (*it)->position())
 					 {
-								cout << "Found\n";
-								delete scene.subObject().at(i);
-								scene.subObject().erase(scene.subObject().begin());
-								//currentPosition.erase(currentPosition.begin());
-								found = 1;
+							cout<<"Overriding previous object at location with cube\n";
+							delete *it;
+							it = scene.subObject().erase(it);
+							found = 1;
 					 }
+					 else
+						 ++it;
 				 }
-			 }
+				 else
+					 ++it;
 		 }
 		 found = 0;
-		 */
+		 
 		 
 		 Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
          scene.addRayObject(cube);
@@ -373,6 +409,26 @@ void showObjectsMenu()
 		 redoMenu = 1;
          cout << "enter the position of the cube:\n";
          cin >> tmp;
+
+		 for (it = scene.subObject().begin(); it != scene.subObject().end();)
+		 {
+				 if (found == 0)
+				 {
+					 if (stringToCoord(tmp) == (*it)->position())
+					 {
+							cout<<"Overriding previous object at location with cone\n";
+							delete *it;
+							it = scene.subObject().erase(it);
+							found = 1;
+					 }
+					 else
+						 ++it;
+				 }
+				 else
+					 ++it;
+		 }
+		 found = 0;
+
          Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
          scene.addRayObject(cube);
 		 
@@ -382,6 +438,26 @@ void showObjectsMenu()
 		 redoMenu = 1;
          cout << "enter the position of the cube:\n";
          cin >> tmp;
+
+		 for (it = scene.subObject().begin(); it != scene.subObject().end();)
+		 {
+				 if (found == 0)
+				 {
+					 if (stringToCoord(tmp) == (*it)->position())
+					 {
+							cout<<"Overriding previous object at location with cylinder\n";
+							delete *it;
+							it = scene.subObject().erase(it);
+							found = 1;
+					 }
+					 else
+						 ++it;
+				 }
+				 else
+					 ++it;
+		 }
+		 found = 0;
+
          Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
          scene.addRayObject(cube);
 		 

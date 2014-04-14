@@ -688,7 +688,7 @@ public:
    }
 
    //return the vector
-   vector<RayObject*> subObject()
+   vector<RayObject*>& subObject()
    {
 	   return _subObjects;
    }
