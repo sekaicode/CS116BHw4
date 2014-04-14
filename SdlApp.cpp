@@ -6,6 +6,25 @@
 /*---------------------------------------------------------------------------*/
 /* GLOBALS */
 vector<Light> lights;
+int redoMenu = 0; //This allows user to redo menu 
+vector<Point> currentPosition; //This is the current positions in the scene
+static vector<shared_ptr<ShaderState> > g_shaderStates;// our global shader states
+
+static const int G_NUM_SHADERS = 1;
+//changed array sizes from 3 to 2, revert if things break.
+static const char * const G_SHADER_FILES[G_NUM_SHADERS][2] =
+{
+    
+    {"./shaders/basic-gl3.vshader", "./shaders/texture-gl3.fshader"}
+};
+static const char * const G_SHADER_FILESGl2[G_NUM_SHADERS][2] =
+{
+    
+    {"./shaders/basic-gl2.vshader", "./shaders/texture-gl2.fshader"}
+};
+
+
+
 
 /*---------------------------------------------------------------------------*/
 /* FUNCTIONS */
@@ -251,58 +270,121 @@ void showObjectsMenu()
 {
    //make objects
    string tmp;
+   int found = 0; //used to break out of loop
    while (tmp != "done")
    {
-      cout
-            << "Enter your object (light, tetrahedron, sphere, cube, cone, cylinder), or \"done\":\n";
-      cin >> tmp;
+      if (redoMenu == 0)
+		cout << "Enter your object (light, tetrahedron, sphere, cube, cone, cylinder), or \"done\":\n";
+	  else if (redoMenu == 1)
+		cout << "Re-enter your object (light, tetrahedron, sphere, cube, cone, cylinder), or \"done\":\n"; 
+	  cin >> tmp;
       if (tmp == "light")
       {
+		 redoMenu = 1;
          cout << "Enter the position of the light:\n";
          cin >> tmp;
-         //light is 5 squares above board
+		 //light is 5 squares above board
          lights.push_back(
                Light(lightColor,
-                     Point(BOARD_POSITION)
+						   Point(BOARD_POSITION)
                            + Point(0.0, 3.5 * SQUARE_EDGE_SIZE, 0.0)
                            + stringToCoord(tmp)));
+		 
       }
 
       else if (tmp == "tetrahedron")
       {
-         cout << "enter the position of the tetrahedron:\n";
+         redoMenu = 1;
+		 cout << "enter the position of the tetrahedron:\n";
          cin >> tmp;
+		 
          Tetrahedron *tetrahedron = new Tetrahedron(stringToCoord(tmp),
                SQUARE_EDGE_SIZE);
          scene.addRayObject(tetrahedron);
+		 
       }
       else if (tmp == "sphere")
       {
+		 redoMenu = 1;
          cout << "enter the position of the sphere:\n";
          cin >> tmp;
-         Sphere *sphere = new Sphere(stringToCoord(tmp), SQUARE_EDGE_SIZE / 2);
+         /*
+		 currentPosition.push_back(stringToCoord(tmp));
+
+		 for (int i = 0; i < scene.subObject().size(); i++)
+		 {
+			 for (int j = 0; j < currentPosition.size(); j++)
+			 {
+				 if (found == 0)
+				 {
+					 if (currentPosition.at(j) == scene.subObject().at(i)->position())
+					 {
+								
+								cout << "Found\n";
+								//delete scene.subObject().at(i);
+								//scene.subObject().erase(scene.subObject().begin());
+								//currentPosition.erase(currentPosition.begin());
+								found = 1;
+					 }
+				 }
+			 }
+		 }
+		 found = 0;
+		 */
+		 
+		 Sphere *sphere = new Sphere(stringToCoord(tmp), SQUARE_EDGE_SIZE / 2);
          scene.addRayObject(sphere);
+		 
       }
       else if (tmp == "cube")
       {
+		 redoMenu = 1;
          cout << "enter the position of the cube:\n";
          cin >> tmp;
-         Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
+         /*
+		 currentPosition.push_back(stringToCoord(tmp));
+
+		 for (int i = 0; i < scene.subObject().size(); i++)
+		 {
+			 for (int j = 0; j < currentPosition.size(); j++)
+			 {
+				 if (found == 0)
+				 {
+					 if (currentPosition.at(j) == scene.subObject().at(i)->position())
+					 {
+								cout << "Found\n";
+								delete scene.subObject().at(i);
+								scene.subObject().erase(scene.subObject().begin());
+								//currentPosition.erase(currentPosition.begin());
+								found = 1;
+					 }
+				 }
+			 }
+		 }
+		 found = 0;
+		 */
+		 
+		 Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
          scene.addRayObject(cube);
+		 
       }
       else if (tmp == "cone")
       {
+		 redoMenu = 1;
          cout << "enter the position of the cube:\n";
          cin >> tmp;
          Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
          scene.addRayObject(cube);
+		 
       }
       else if (tmp == "cylinder")
       {
+		 redoMenu = 1;
          cout << "enter the position of the cube:\n";
          cin >> tmp;
          Cube *cube = new Cube(stringToCoord(tmp), SQUARE_EDGE_SIZE);
          scene.addRayObject(cube);
+		 
       }
    }
 

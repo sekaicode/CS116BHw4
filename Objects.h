@@ -187,6 +187,15 @@ public:
       _z = other._z;
       return *this;
    }
+
+   //checks to see if a point equals to another
+   bool operator==(const Point &other)
+   {
+      if( _x == other._x && _y == other._y && _z == other._z)
+		  return true;
+	  else
+		  return false;
+   }
 };
 
 Point whiteColor(WHITE); // some abbreviations for various colors
@@ -457,6 +466,13 @@ public:
       _position = p;
       _material = m;
    }
+
+   //returns position of rayobject
+   Point position()
+   {
+      return _position;
+   }
+
    virtual void doIIntersectWith(const Line& l, const Point& positionOffset,
          Intersection& inter) = 0;
    // by overriding intersection in different ways control how rays hit objects in our scene
@@ -670,6 +686,13 @@ public:
    {
       _subObjects.push_back(objects);
    }
+
+   //return the vector
+   vector<RayObject*> subObject()
+   {
+	   return _subObjects;
+   }
+
 
    /*
     PURPOSE: used to fill in an Intersection object with information about how the supplied ray
