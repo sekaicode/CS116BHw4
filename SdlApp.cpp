@@ -14,10 +14,77 @@ static ShaderState *g_shader;// our global shader states
 
 //static const int G_NUM_SHADERS = 1;
 //changed array sizes from 3 to 2, revert if things break.
+
 static const char * const G_SHADER_FILES[2] = 
 	{"./shaders/basic-gl3.vshader", "./shaders/square-test-gl3.fshader"};
 
 
+// --------- Geometry
+// Macro used to obtain relative offset of a field within a struct
+#define FIELD_OFFSET(StructType, field) &(((StructType *)0)->field)
+static GLfloat g_eyePosition[3] = { 0.0, 0.0, 1.0};
+#define SPHERE 1 // assume sphere in format radius, base point
+static GLfloat g_geometryData[5] = { SPHERE, -0.2, 0.0, 0.0, 0.0 };
+static Matrix4 g_objectRbt[1] = {Matrix4::makeTranslation(Cvec3(0,0,0))};
+static Matrix4 g_skyRbt = Matrix4::makeTranslation(Cvec3(0.0, 0.0, 1.5));
+static const float g_frustMinFov = 60.0;  //A minimal of 60 degree field of view
+static float g_frustFovY = g_frustMinFov; // FOV in y direction
+
+static const float g_frustNear = -0.1;    // near plane
+static const float g_frustFar = -50.0;    // far plane
+static int g_windowWidth = 512;
+static int g_windowHeight = 512;
+
+// takes a projection matrix and send to the the shaders
+static void sendProjectionMatrix(const ShaderState& curSS,
+                                 const Matrix4& projMatrix)
+{
+    GLfloat glmatrix[16];
+    projMatrix.writeToColumnMajorMatrix(glmatrix); // send projection matrix
+    safe_glUniformMatrix4fv(curSS.h_uProjMatrix, glmatrix);
+}
+
+// takes MVM and its normal matrix to the shaders
+static void sendGeometry(const ShaderState& curSS,
+                                      const Matrix4& MVM)
+{
+    GLfloat glmatrix[16];
+    MVM.writeToColumnMajorMatrix(glmatrix); // send MVM
+    safe_glUniformMatrix4fv(curSS.h_uModelViewMatrix, glmatrix);
+
+	glUniform1fv(curSS.h_uEyePosition, 4, g_eyePosition);
+	glUniform1fv(curSS.h_uGeometry, 4, g_geometryData);
+}
+
+static Matrix4 makeProjectionMatrix()
+{
+    return Matrix4::makeProjection(g_frustFovY,
+        g_windowWidth / static_cast <double> (g_windowHeight),
+        g_frustNear, g_frustFar);
+}
+static shared_ptr<Geometry> g_plane;
+static int g_activeShader = 0;
+static void drawStuff()
+{
+    // short hand for current shader state
+    const ShaderState& curSS = *g_shaderStates[g_activeShader];
+
+    // build & send proj. matrix to vshader
+    const Matrix4 projmat = makeProjectionMatrix();
+    sendProjectionMatrix(curSS, projmat);
+
+    // use the skyRbt as the eyeRbt
+    const Matrix4 eyeRbt = g_skyRbt;
+    const Matrix4 invEyeRbt = inv(eyeRbt);
+
+    const Matrix4 groundRbt = Matrix4();  // identity
+    Matrix4 MVM = invEyeRbt * groundRbt;
+    // draw cubes
+    // ==========
+    MVM = invEyeRbt * g_objectRbt[0];
+    sendGeometry(curSS, MVM);
+    g_plane->draw(curSS);
+}
 
 /*---------------------------------------------------------------------------*/
 /* FUNCTIONS */
@@ -526,6 +593,7 @@ SdlApp::SdlApp()
 	makeObjects();
 	//makeTextures();
 }
+
 
 void SdlApp::makeShaders() {
 	g_shader = new ShaderState(G_SHADER_FILES[0],
