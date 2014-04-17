@@ -52,8 +52,8 @@ static void sendGeometry(const ShaderState& curSS,
     MVM.writeToColumnMajorMatrix(glmatrix); // send MVM
     safe_glUniformMatrix4fv(curSS.h_uModelViewMatrix, glmatrix);
 
-	glUniform1fv(curSS.h_uEyePosition, 4, g_eyePosition);
-	glUniform1fv(curSS.h_uGeometry, 4, g_geometryData);
+	//glUniform1fv(curSS.h_uEyePosition, 4, g_eyePosition);
+	//glUniform1fv(curSS.h_uGeometry, 4, g_geometryData);
 }
 
 static Matrix4 makeProjectionMatrix()
@@ -67,7 +67,7 @@ static int g_activeShader = 0;
 static void drawStuff()
 {
     // short hand for current shader state
-    const ShaderState& curSS = *g_shaderStates[g_activeShader];
+    const ShaderState& curSS = *g_shader;
 
     // build & send proj. matrix to vshader
     const Matrix4 projmat = makeProjectionMatrix();
