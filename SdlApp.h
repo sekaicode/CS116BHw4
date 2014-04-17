@@ -34,6 +34,7 @@ private:
    bool running;
    SDL_Window* display;
    void keydown(const char * key);
+   void makeShaders();
 
 public:
    SdlApp();
@@ -53,33 +54,23 @@ struct ShaderState
    GlProgram program;
 
    // Handles to uniform variables
-   GLint h_uLight;
    GLint h_uProjMatrix;
    GLint h_uModelViewMatrix;
-   GLint h_uNormalMatrix;
-   GLint h_uTexUnit;
 
    // Handles to vertex attributes
    GLint h_aPosition;
-   GLint h_aNormal;
-   GLint h_aTexCoord;
 
-   ShaderState(const char* vsfn, const char* fsfn, int numtextures)
+   ShaderState(const char *vsfn, const char *fsfn)
    {
       readAndCompileShader(program, vsfn, fsfn);
       const GLuint h = program; // short hand
 
       // Retrieve handles to uniform variables
-      h_uLight = safe_glGetUniformLocation(h, "uLight");
       h_uProjMatrix = safe_glGetUniformLocation(h, "uProjMatrix");
       h_uModelViewMatrix = safe_glGetUniformLocation(h, "uModelViewMatrix");
-      h_uNormalMatrix = safe_glGetUniformLocation(h, "uNormalMatrix");
-      h_uTexUnit = safe_glGetUniformLocation(h, "uTexUnit");
-
+      
       // Retrieve handles to vertex attributes
       h_aPosition = safe_glGetAttribLocation(h, "aPosition");
-      h_aNormal = safe_glGetAttribLocation(h, "aNormal");
-      h_aTexCoord = safe_glGetAttribLocation(h, "aTexCoord");
 
       checkGlErrors();
    }
@@ -130,21 +121,12 @@ struct Geometry
    {
       // Enable the attributes used by our shader
       safe_glEnableVertexAttribArray(CUR_SS.h_aPosition);
-      safe_glEnableVertexAttribArray(CUR_SS.h_aNormal);
-      safe_glEnableVertexAttribArray(CUR_SS.h_aTexCoord);
 
       // bind vertex buffer object
       glBindBuffer(GL_ARRAY_BUFFER, vbo);
       safe_glVertexAttribPointer(CUR_SS.h_aPosition, 3, GL_FLOAT, GL_FALSE,
             sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, pos));
-      safe_glVertexAttribPointer(CUR_SS.h_aNormal, 3, GL_FLOAT, GL_FALSE,
-            sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, normal));
-
-      //bind texture buffer object
-      glBindBuffer(GL_ARRAY_BUFFER, texVbo);
-      safe_glVertexAttribPointer(CUR_SS.h_aTexCoord, 2, GL_FLOAT, GL_FALSE,
-            sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, tex));
-
+            
       // bind index buffer object
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 
@@ -153,8 +135,6 @@ struct Geometry
 
       // Disable the attributes used by our shader
       safe_glDisableVertexAttribArray(CUR_SS.h_aPosition);
-      safe_glDisableVertexAttribArray(CUR_SS.h_aNormal);
-      safe_glDisableVertexAttribArray(CUR_SS.h_aTexCoord);
    }
 };
 #endif
