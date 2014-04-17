@@ -8,7 +8,46 @@
 vector<Light> lights;
 int redoMenu = 0; //This allows user to redo menu 
 vector<Point> currentPosition; //This is the current positions in the scene
-static vector<shared_ptr<ShaderState> > g_shaderStates;// our global shader states
+
+
+/*
+ Shader state of a GL program.
+ It holds uniform variables and vertex attributes.
+ It also holds handle to a program, and attaches shaders to it.
+ */
+struct ShaderState
+{
+   GlProgram program;
+
+   // Handles to uniform variables
+   GLint h_uProjMatrix;
+   GLint h_uModelViewMatrix;
+   GLint h_uEyePosition;	
+   GLint h_uGeometry;
+  
+
+   // Handles to vertex attributes
+   GLint h_aPosition;
+
+
+   ShaderState(const char* vsfn, const char* fsfn, int numtextures)
+   {
+      readAndCompileShader(program, vsfn, fsfn);
+      const GLuint h = program; // short hand
+
+      // Retrieve handles to uniform variables
+      h_uProjMatrix = safe_glGetUniformLocation(h, "uProjMatrix");
+      h_uModelViewMatrix = safe_glGetUniformLocation(h, "uModelViewMatrix");
+	  h_uGeometry = safe_glGetUniformLocation(h, "uGeometry");
+	  h_uEyePosition = safe_glGetUniformLocation(h, "uEyePosition");
+
+      // Retrieve handles to vertex attributes
+      h_aPosition = safe_glGetAttribLocation(h, "aPosition");
+
+
+      checkGlErrors();
+   }
+};
 
 static const int G_NUM_SHADERS = 1;
 //changed array sizes from 3 to 2, revert if things break.
@@ -23,8 +62,135 @@ static const char * const G_SHADER_FILESGl2[G_NUM_SHADERS][2] =
     {"./shaders/basic-gl2.vshader", "./shaders/texture-gl2.fshader"}
 };
 
+static vector<shared_ptr<ShaderState> > g_shaderStates;// our global shader states
 
+// --------- Geometry
+// Macro used to obtain relative offset of a field within a struct
+#define FIELD_OFFSET(StructType, field) &(((StructType *)0)->field)
+static GLfloat g_eyePosition[3] = { 0.0, 0.0, 1.0};
+#define SPHERE 1 // assume sphere in format radius, base point
+static GLfloat g_geometryData[5] = { SPHERE, -0.2, 0.0, 0.0, 0.0 };
+static Matrix4 g_objectRbt[1] = {Matrix4::makeTranslation(Cvec3(0,0,0))};
+static Matrix4 g_skyRbt = Matrix4::makeTranslation(Cvec3(0.0, 0.0, 1.5));
+static const float g_frustMinFov = 60.0;  //A minimal of 60 degree field of view
+static float g_frustFovY = g_frustMinFov; // FOV in y direction
 
+static const float g_frustNear = -0.1;    // near plane
+static const float g_frustFar = -50.0;    // far plane
+static int g_windowWidth = 512;
+static int g_windowHeight = 512;
+
+/*
+ Geometry struct.
+ It holds the coordinates of vectices and textures in buffer objects
+ and draws them.
+ */
+struct Geometry
+{
+   GlBufferObject vbo, texVbo, ibo;
+   int vboLen, iboLen;
+
+   Geometry(GenericVertex *vtx, unsigned short *idx, int vboLen, int iboLen)
+   {
+      this->vboLen = vboLen;
+      this->iboLen = iboLen;
+
+      // create vertex buffer object
+      glBindBuffer(GL_ARRAY_BUFFER, vbo);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(GenericVertex) * vboLen, vtx,
+      GL_STATIC_DRAW);
+
+      //create index buffer object
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+      glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * iboLen,
+            idx, GL_STATIC_DRAW);
+
+      //create texture buffer object
+      glBindBuffer(GL_ARRAY_BUFFER, texVbo);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(GenericVertex) * vboLen, vtx,
+      GL_STATIC_DRAW);
+   }
+
+   /*
+    PURPOSE: Draws the opengl objects.
+    Uses what shader state specifies such as drawing a sphere, giving it
+    coordinates, and its texture.
+    RECEIVES:   current shader state address
+    */
+   void draw(const ShaderState& CUR_SS)
+   {
+      // Enable the attributes used by our shader
+      safe_glEnableVertexAttribArray(CUR_SS.h_aPosition);
+
+      // bind vertex buffer object
+      glBindBuffer(GL_ARRAY_BUFFER, vbo);
+      safe_glVertexAttribPointer(CUR_SS.h_aPosition, 3, GL_FLOAT, GL_FALSE,
+            sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, pos));
+  
+      //bind texture buffer object
+      glBindBuffer(GL_ARRAY_BUFFER, texVbo);
+
+      // bind index buffer object
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+
+      // draw!
+      glDrawElements(GL_TRIANGLES, iboLen, GL_UNSIGNED_SHORT, 0);
+
+      // Disable the attributes used by our shader
+      safe_glDisableVertexAttribArray(CUR_SS.h_aPosition);
+   }
+};
+
+// takes a projection matrix and send to the the shaders
+static void sendProjectionMatrix(const ShaderState& curSS,
+                                 const Matrix4& projMatrix)
+{
+    GLfloat glmatrix[16];
+    projMatrix.writeToColumnMajorMatrix(glmatrix); // send projection matrix
+    safe_glUniformMatrix4fv(curSS.h_uProjMatrix, glmatrix);
+}
+
+// takes MVM and its normal matrix to the shaders
+static void sendGeometry(const ShaderState& curSS,
+                                      const Matrix4& MVM)
+{
+    GLfloat glmatrix[16];
+    MVM.writeToColumnMajorMatrix(glmatrix); // send MVM
+    safe_glUniformMatrix4fv(curSS.h_uModelViewMatrix, glmatrix);
+
+	glUniform1fv(curSS.h_uEyePosition, 4, g_eyePosition);
+	glUniform1fv(curSS.h_uGeometry, 4, g_geometryData);
+}
+
+static Matrix4 makeProjectionMatrix()
+{
+    return Matrix4::makeProjection(g_frustFovY,
+        g_windowWidth / static_cast <double> (g_windowHeight),
+        g_frustNear, g_frustFar);
+}
+static shared_ptr<Geometry> g_plane;
+static int g_activeShader = 0;
+static void drawStuff()
+{
+    // short hand for current shader state
+    const ShaderState& curSS = *g_shaderStates[g_activeShader];
+
+    // build & send proj. matrix to vshader
+    const Matrix4 projmat = makeProjectionMatrix();
+    sendProjectionMatrix(curSS, projmat);
+
+    // use the skyRbt as the eyeRbt
+    const Matrix4 eyeRbt = g_skyRbt;
+    const Matrix4 invEyeRbt = inv(eyeRbt);
+
+    const Matrix4 groundRbt = Matrix4();  // identity
+    Matrix4 MVM = invEyeRbt * groundRbt;
+    // draw cubes
+    // ==========
+    MVM = invEyeRbt * g_objectRbt[0];
+    sendGeometry(curSS, MVM);
+    g_plane->draw(curSS);
+}
 
 /*---------------------------------------------------------------------------*/
 /* FUNCTIONS */
@@ -532,6 +698,7 @@ SdlApp::SdlApp()
    //makeShaders();
    makeObjects();
    //makeTextures();
+   //drawStuff();
 }
 
 /* PURPOSE: Executes the SDL application. Loops until event to quit.
