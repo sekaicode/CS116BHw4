@@ -85,15 +85,22 @@ static void readTextFile(const char *fn, vector<char>& data)
 
 void readAndCompileSingleShader(GLuint shaderHandle, const char *fn)
 {
-   vector<char> source;
-   readTextFile(fn, source);
-   const char *ptrs[] = { &source[0] };
-   const GLint lens[] = { (GLint)source.size() };
-   glShaderSource(shaderHandle, 1, ptrs, lens);   // load the shader sources
-   glCompileShader(shaderHandle);
-   //printShaderInfoLog(shaderHandle, fn);
-   GLint compiled = 0;
-   glGetShaderiv(shaderHandle, GL_COMPILE_STATUS, &compiled);
+	vector<char> source;
+	readTextFile(fn, source);
+	const char *ptrs[] = { &source[0] };
+	const GLint lens[] = { (GLint)source.size() };
+	glShaderSource(shaderHandle, 1, ptrs, lens);   // load the shader sources
+	glCompileShader(shaderHandle);
+	//printShaderInfoLog(shaderHandle, fn);
+	GLint compiled = 0;
+	glGetShaderiv(shaderHandle, GL_COMPILE_STATUS, &compiled);
+	int bufferLen;
+	glGetShaderiv(shaderHandle, GL_INFO_LOG_LENGTH, &bufferLen);
+	if (bufferLen > 0) {
+		char errorLog[bufferLen + 1];
+		glGetShaderInfoLog(shaderHandle, bufferLen, 0, errorLog);
+		cout << "Shader Compile Log:" << endl << errorLog << endl;
+	}
    if (!compiled)
    {
       throw runtime_error("fails to compile GL shader");

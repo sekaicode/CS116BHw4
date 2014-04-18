@@ -20,8 +20,6 @@ static const char * const G_SHADER_FILES[2] =
 
 
 // --------- Geometry
-// Macro used to obtain relative offset of a field within a struct
-#define FIELD_OFFSET(StructType, field) &(((StructType *)0)->field)
 static GLfloat g_eyePosition[3] = { 0.0, 0.0, 1.0};
 #define SPHERE 1 // assume sphere in format radius, base point
 static GLfloat g_geometryData[5] = { SPHERE, -0.2, 0.0, 0.0, 0.0 };
@@ -35,6 +33,88 @@ static const float g_frustFar = -50.0;    // far plane
 static int g_windowWidth = 512;
 static int g_windowHeight = 512;
 
+static Geometry *g_plane;
+
+
+/*
+ Shader state of a GL program.
+ It holds uniform variables and vertex attributes.
+ It also holds handle to a program, and attaches shaders to it.
+ */
+
+ShaderState::ShaderState(const char *vsfn, const char *fsfn)
+{
+	readAndCompileShader(program, vsfn, fsfn);
+	const GLuint h = program; // short hand
+
+	// Retrieve handles to uniform variables
+	h_uProjMatrix = safe_glGetUniformLocation(h, "uProjMatrix");
+	h_uModelViewMatrix = safe_glGetUniformLocation(h, "uModelViewMatrix");
+	
+	// Retrieve handles to vertex attributes
+	h_aPosition = safe_glGetAttribLocation(h, "aPosition");
+	
+	glBindFragDataLocation(h, 0, "fragColor");
+
+	checkGlErrors();
+}
+
+// --------- Geometry
+// Macro used to obtain relative offset of a field within a struct
+#define FIELD_OFFSET(StructType, field) &(((StructType *)0)->field)
+
+/*
+ Geometry struct.
+ It holds the coordinates of vectices and textures in buffer objects
+ and draws them.
+ */
+
+Geometry::Geometry(GenericVertex *vtx, unsigned short *idx, int vboLen, int iboLen)
+{
+	this->vboLen = vboLen;
+	this->iboLen = iboLen;
+
+	// create vertex buffer object
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GenericVertex) * vboLen, vtx,
+	GL_STATIC_DRAW);
+
+	//create index buffer object
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned short) * iboLen,
+			idx, GL_STATIC_DRAW);
+}
+
+
+/*
+ PURPOSE: Draws the opengl objects.
+ Uses what shader state specifies such as drawing a sphere, giving it
+ coordinates, and its texture.
+ RECEIVES:	current shader state address
+ */
+void Geometry::draw(const ShaderState& CUR_SS)
+{
+	// Enable the attributes used by our shader
+	safe_glEnableVertexAttribArray(CUR_SS.h_aPosition);
+
+	// bind vertex buffer object
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	safe_glVertexAttribPointer(CUR_SS.h_aPosition, 3, GL_FLOAT, GL_FALSE,
+			sizeof(GenericVertex), FIELD_OFFSET(GenericVertex, pos));
+			
+	// bind index buffer object
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+
+	// draw!
+	glDrawElements(GL_TRIANGLES, iboLen, GL_UNSIGNED_SHORT, 0);
+	
+
+	// Disable the attributes used by our shader
+	safe_glDisableVertexAttribArray(CUR_SS.h_aPosition);
+}
+
+
+
 // takes a projection matrix and send to the the shaders
 static void sendProjectionMatrix(const ShaderState& curSS,
                                  const Matrix4& projMatrix)
@@ -45,8 +125,7 @@ static void sendProjectionMatrix(const ShaderState& curSS,
 }
 
 // takes MVM and its normal matrix to the shaders
-static void sendGeometry(const ShaderState& curSS,
-                                      const Matrix4& MVM)
+static void sendGeometry(const ShaderState& curSS, const Matrix4& MVM)
 {
     GLfloat glmatrix[16];
     MVM.writeToColumnMajorMatrix(glmatrix); // send MVM
@@ -62,16 +141,12 @@ static Matrix4 makeProjectionMatrix()
         g_windowWidth / static_cast <double> (g_windowHeight),
         g_frustNear, g_frustFar);
 }
-static shared_ptr<Geometry> g_plane;
-static int g_activeShader = 0;
+
 static void drawStuff()
 {
-    // short hand for current shader state
-    const ShaderState& curSS = *g_shader;
-
     // build & send proj. matrix to vshader
     const Matrix4 projmat = makeProjectionMatrix();
-    sendProjectionMatrix(curSS, projmat);
+    sendProjectionMatrix(*g_shader, projmat);
 
     // use the skyRbt as the eyeRbt
     const Matrix4 eyeRbt = g_skyRbt;
@@ -82,8 +157,8 @@ static void drawStuff()
     // draw cubes
     // ==========
     MVM = invEyeRbt * g_objectRbt[0];
-    sendGeometry(curSS, MVM);
-    g_plane->draw(curSS);
+    sendGeometry(*g_shader, MVM);
+    g_plane->draw(*g_shader);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -548,8 +623,17 @@ void SdlApp::clearCanvas()
  */
 void SdlApp::draw()
 {
+	/*
 	traceRayScreen(scene, lights, Point(CAMERA_POSITION), Point(LOOK_AT_VECTOR),
 			Point(UP_VECTOR), -winWidth / 2, -winHeight / 2, winWidth, winHeight);
+	*/
+	glUseProgram(g_shader->program);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	drawStuff();
+    
+	SDL_GL_SwapWindow(display);
+	checkGlErrors();
+	
 }
 
 void makeObjects()
@@ -559,6 +643,33 @@ void makeObjects()
 
 	//make objects
 	showObjectsMenu();
+}
+
+static void initPlane()
+{
+    int ibLen, vbLen;
+    getPlaneVbIbLen(vbLen, ibLen);
+
+    // Temporary storage for cube geometry
+    vector<GenericVertex> vtx(vbLen);
+    vector<unsigned short> idx(ibLen);
+
+    makePlane(1.1, vtx.begin(), idx.begin());
+    g_plane =  new Geometry(&vtx[0], &idx[0], vbLen, ibLen);
+}
+
+static void initGLState()
+{
+    glClearColor(128./255., 200./255., 255./255., 0.);
+    glClearDepth(0.);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glCullFace(GL_BACK);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_GREATER);
+    glReadBuffer(GL_BACK);
+    glEnable(GL_FRAMEBUFFER_SRGB);
 }
 
 /* PURPOSE: Creates an sdl application.
@@ -585,15 +696,13 @@ SdlApp::SdlApp()
 
 	//init more stuff
 	glewInit();
-	glClearDepth(0);
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_GREATER);
+	initGLState();
 
 	makeShaders();
+	initPlane();
 	makeObjects();
 	//makeTextures();
 }
-
 
 void SdlApp::makeShaders() {
 	g_shader = new ShaderState(G_SHADER_FILES[0],
@@ -620,7 +729,7 @@ int SdlApp::run()
 		//while (SDL_PollEvent(&e))
 		//	handleEvent(&e);
 
-		clearCanvas();
+		//clearCanvas();
 		draw();
 	}
 	SDL_Quit();

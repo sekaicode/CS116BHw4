@@ -189,12 +189,13 @@ public:
    }
 
    //checks to see if a point equals to another
-   bool operator==(const Point &other)
+   bool operator==(const Point &other) const
    {
-      if( _x == other._x && _y == other._y && _z == other._z)
-		  return true;
-	  else
-		  return false;
+   		#define EPSILON .00001
+      if( abs(_x - other._x) <= EPSILON && abs(_y - other._y) <= EPSILON && abs(_z - other._z) <= EPSILON)
+		  	return true;
+	  	else
+		  	return false;
    }
 };
 
