@@ -642,7 +642,7 @@ void makeObjects()
 	scene.addRayObject(new CheckerBoard(Point(0, 0, 0)));
 
 	//make objects
-	showObjectsMenu();
+	//showObjectsMenu();
 }
 
 static void initPlane()
@@ -717,6 +717,12 @@ void SdlApp::makeShaders() {
 	*/
 }
 
+void SdlApp::handleEvent(SDL_Event *event) {
+	if (event->type ==  SDL_QUIT) {
+		running = false;
+	}
+}
+
 /* PURPOSE: Executes the SDL application. Loops until event to quit.
  RETURN: -1 if fail, 0 success.
  */
@@ -726,8 +732,8 @@ int SdlApp::run()
 	SDL_Event e;
 	while (running)
 	{
-		//while (SDL_PollEvent(&e))
-		//	handleEvent(&e);
+		while (SDL_PollEvent(&e))
+			handleEvent(&e);
 
 		//clearCanvas();
 		draw();
