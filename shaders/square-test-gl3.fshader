@@ -7,23 +7,23 @@ out vec4 fragColor;
 struct ray {
 	vec3 org;    //origin position of the ray
 	vec3 dir;    //normalized direction of ray
-}
+};
 
 struct sphere {
 	vec3 pos;
 	float rad;
-}
+};
 
 struct triangle {
 	vec3 v0;
 	vec3 v1;
 	vec3 v2;
-}
+};
 
 struct collision {
 	vec3 pos;
 	vec3 norm;
-}
+};
 
 vec3 sphereIntersect(vec3 org, vec3 dir, vec3 pos, float rad) {
 	vec3 deltaP = pos - org;
