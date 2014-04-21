@@ -120,6 +120,13 @@ void linkShader(GLuint programHandle, GLuint vs, GLuint fs)
    GLint linked = 0;
    glGetProgramiv(programHandle, GL_LINK_STATUS, &linked);
    //printProgramInfoLog(programHandle, "linking");
+   int bufferLen;
+	glGetProgramiv(programHandle, GL_INFO_LOG_LENGTH, &bufferLen);
+	if (bufferLen > 0) {
+		char errorLog[bufferLen + 1];
+		glGetProgramInfoLog(programHandle, bufferLen, 0, errorLog);
+		cout << "Shader Linker Log:" << endl << errorLog << endl;
+	}
 
    if (!linked)
       throw runtime_error("fails to link shaders");
