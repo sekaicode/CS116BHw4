@@ -1,5 +1,5 @@
 #version 130
-#define NUM_SPHERES 1
+#define NUM_SPHERES 2
 #define NUM_TRIANGLES 1
 #define NUM_LIGHTS 1
 
@@ -47,9 +47,9 @@ struct StackFrame {
 	int rayType;    //light or shadow ray.
 };
 
-Sphere sphereArray[NUM_SPHERES] = Sphere[NUM_SPHERES](Sphere(vec3(0.0, 0.0, -5.0), 1.0, MIRROR));
+Sphere sphereArray[NUM_SPHERES] = Sphere[NUM_SPHERES](Sphere(vec3(-1.0, 0.0, -5.0), 1.0, MIRROR), Sphere(vec3(1.0, 0.0, -5.0), 1.0, MIRROR));
 
-Triangle triangleArray[NUM_TRIANGLES] = Triangle[NUM_TRIANGLES](Triangle(vec3(-1, -2, -5), vec3(1, -2, -5), vec3(0, -2, -7), CHECKERBOARD));
+Triangle triangleArray[NUM_TRIANGLES] = Triangle[NUM_TRIANGLES](Triangle(vec3(-10, -2, -5), vec3(10, -2, -5), vec3(0, -2, -70), CHECKERBOARD));
 
 vec3 lightArray[NUM_LIGHTS] = vec3[NUM_LIGHTS](vec3(0, 2, -4));
 
@@ -180,7 +180,7 @@ void main()
 */
 
 float getLightAmount(Collision col) {
-	float light = 0.0;
+	float light = 0.1;
 	for (int n = 0; n < NUM_LIGHTS; n++) {
 		Ray ray = Ray(col.pos, normalize(lightArray[n] - col.pos));
 		if (getCollision(ray).surface != NONE) {	//if there is something obstructing the light
@@ -191,6 +191,10 @@ float getLightAmount(Collision col) {
 	return light;
 }
 
+vec4 getCheckerboardColor(vec3 position) {
+	return vec4(1, 1, 1, 0) * mod(step(.25, mod(position.x, .5)) + step(.25, mod(position.z, .5)), 2);
+}
+
 
 void main() {
 	//fragColor = vec4(0, 0, 1, 0);
@@ -198,26 +202,16 @@ void main() {
 	int depth = 1;
 	int reddening = 0; //number of red surfaces encountered
 	Collision collision = getCollision(ray);
-	/*
-	if (collision.surface != NONE) {
-		fragColor = vec4(1, 1, 1, 0);
-		return;
-	} else {
-		fragColor = vec4(0, 0, 0, 0);
-		return;
-	}
-	*/
 	while (collision.surface >= MIRROR && depth < MAXDEPTH) {
 		reddening += (collision.surface == REDMIRROR) ? 1 : 0;
 		ray.org = collision.pos;
 		ray.dir = ray.dir - 2 * collision.norm * dot(ray.dir, collision.norm);	//reflect the ray
 		collision = getCollision(ray);
 		depth++;
-		//reddening++;
 	}
 	if (collision.surface == CHECKERBOARD) {
 			float red = float(reddening)/depth;
-			fragColor = red*vec4(1, 0, 0, 0) + (1-red)*vec4(1, 1, 1, 0);
+			fragColor = getLightAmount(collision) * (red*vec4(1, 0, 0, 0) + (1-red)*getCheckerboardColor(collision.pos));
 	} else {
 			fragColor = vec4(0, 0, 0, 0);
 	}
