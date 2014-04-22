@@ -13,7 +13,7 @@ void checkGlErrors();
 // Reads and compiles a pair of vertex shader and fragment shader files into a
 // GL shader program. Throws runtime_error on error
 void readAndCompileShader(GLuint programHandle,
-   const char *vertexShaderFileName, const char *fragmentShaderFileName);
+   const char *vertexShaderFileName, const char *fragmentShaderFileName, std::string);
 
 // Link two compiled vertex shader and fragment shader into a GL shader program
 void linkShader(GLuint programHandle, GLuint vertexShaderHandle, 

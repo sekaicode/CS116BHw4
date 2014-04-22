@@ -50,7 +50,7 @@ void checkGlErrors()
 }
 
 // Dump text file into a character vector, throws exception on error
-static void readTextFile(const char *fn, vector<char>& data)
+static void readTextFile(const char *fn, vector<char>& data, string prefix)
 {
    // Sets ios::binary bit to prevent end of line translation, so that the
    // number of bytes we read equals file size
@@ -62,9 +62,13 @@ static void readTextFile(const char *fn, vector<char>& data)
    ifs.exceptions(ios::eofbit | ios::failbit | ios::badbit);
    ifs.seekg(0, ios::end);
    size_t len = ifs.tellg();
-   data.resize(len);
+   data.resize(len + prefix.length());
+   int i = 0;
+   for (; i < prefix.length(); i++) {
+   	data[i] = prefix[i];
+   }
    ifs.seekg(0, ios::beg);
-   ifs.read(&data[0], len);
+   ifs.read(&data[i], len);
 }
 
 /*static void printShaderInfoLog(GLuint shaderHandle, const string& fn){
@@ -83,10 +87,10 @@ static void readTextFile(const char *fn, vector<char>& data)
   cerr <<"Program log[" << fn << "]:" << endl << log << endl;
   }*/
 
-void readAndCompileSingleShader(GLuint shaderHandle, const char *fn)
+void readAndCompileSingleShader(GLuint shaderHandle, const char *fn, string prefix)
 {
 	vector<char> source;
-	readTextFile(fn, source);
+	readTextFile(fn, source, prefix);
 	const char *ptrs[] = { &source[0] };
 	const GLint lens[] = { (GLint)source.size() };
 	glShaderSource(shaderHandle, 1, ptrs, lens);   // load the shader sources
@@ -139,8 +143,8 @@ void readAndCompileShader(GLuint programHandle, const char
    GlShader vs(GL_VERTEX_SHADER);
    GlShader fs(GL_FRAGMENT_SHADER);
 
-   readAndCompileSingleShader(vs, vertexShaderFileName);
-   readAndCompileSingleShader(fs, fragmentShaderFileName);
+   readAndCompileSingleShader(vs, vertexShaderFileName, "");
+   readAndCompileSingleShader(fs, fragmentShaderFileName, "#define NUM_SPHERES 2\n");
 
    linkShader(programHandle, vs, fs);
 }
